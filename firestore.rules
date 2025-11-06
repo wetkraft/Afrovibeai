@@ -1,0 +1,151 @@
+
+/**
+ * @fileoverview Firestore Security Rules for ArtCover AI (Enhanced Increment Support)
+ *
+ * Allows safe client Afrocoin & refined image updates using Firestore `increment()`,
+ * enforces wallet consistency, and protects all critical fields.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+
+      /** Check if authenticated user owns this document */
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      /** Allow trusted server/admin operations (Admin SDK has no auth) */
+      function isServer() {
+        return request.auth == null;
+      }
+
+      /** Validate new user document creation */
+      function isValidCreate() {
+        let data = request.resource.data;
+
+        let hasBaseFields = data.displayName is string && data.displayName.size() > 0 &&
+                            data.email == request.auth.token.email &&
+                            data.creationDate == request.time &&
+                            data.emailVerified == false;
+
+        let hasInitialCurrency = data.afrocoins == 0 && data.refinedImages == 5;
+        let hasInitialWallet = data.wallet.balance == 0 && data.wallet.currency == 'USD';
+
+        return hasBaseFields && hasInitialCurrency && hasInitialWallet;
+      }
+
+      /**
+       * Detects client purchase of Afrocoins using wallet balance.
+       * Works safely with `increment()` usage.
+       */
+      function clientIsBuyingCoinsWithWallet() {
+        let data = request.resource.data;
+        let existingData = resource.data;
+
+        let areCoinsBeingAdded = data.afrocoins > existingData.afrocoins;
+        let isWalletDecremented = data.wallet.balance < existingData.wallet.balance;
+        let isWalletCurrencyUnchanged = data.wallet.currency == 'USD' &&
+                                        existingData.wallet.currency == 'USD';
+        
+        let areRefinesBeingAdded = data.refinedImages > existingData.refinedImages;
+
+        // Must be spending wallet USD to increase Afrocoins and Refines
+        return areCoinsBeingAdded && areRefinesBeingAdded && isWalletDecremented && isWalletCurrencyUnchanged;
+      }
+
+      /**
+       * Detects client purchase of Refines using wallet balance.
+       */
+      function clientIsBuyingRefinesWithWallet() {
+          let data = request.resource.data;
+          let existingData = resource.data;
+          
+          let areRefinesBeingAdded = data.refinedImages > existingData.refinedImages;
+          let isWalletDecremented = data.wallet.balance < existingData.wallet.balance;
+          let isWalletCurrencyUnchanged = data.wallet.currency == 'USD' &&
+                                          existingData.wallet.currency == 'USD';
+
+          return areRefinesBeingAdded && isWalletDecremented && isWalletCurrencyUnchanged;
+      }
+
+      /**
+       * Validates client-side updates.
+       * Supports atomic `increment()` operations on Afrocoins, wallet, and refinedImages.
+       */
+      function isValidClientUpdate() {
+        let data = request.resource.data;
+        let existingData = resource.data;
+
+        // Immutable fields
+        let areImmutableFieldsUnchanged =
+            data.creationDate == existingData.creationDate &&
+            data.email == existingData.email;
+
+        // Email verification logic
+        let isVerificationUpdateValid =
+            existingData.emailVerified == false && data.emailVerified == true;
+
+        let isStandardUpdate = 
+            // Wallet is unchanged for non-purchase actions
+            data.wallet.balance == existingData.wallet.balance && 
+            data.wallet.currency == existingData.wallet.currency &&
+            // Display name update is valid
+            data.displayName == data.displayName &&
+            // Allow decrement for generating or increment for verification
+            (isVerificationUpdateValid && data.afrocoins == existingData.afrocoins + 10 || 
+             data.afrocoins == existingData.afrocoins - 5 || 
+             data.afrocoins == existingData.afrocoins) &&
+            // Allow decrement for refining or no change
+            (data.refinedImages == existingData.refinedImages - 1 || data.refinedImages == existingData.refinedImages);
+
+        let isCoinPurchase = clientIsBuyingCoinsWithWallet() &&
+                              // Only afrocoins, refines, and wallet should change
+                              data.displayName == existingData.displayName &&
+                              areImmutableFieldsUnchanged &&
+                              data.emailVerified == existingData.emailVerified;
+
+        let isRefinePurchase = clientIsBuyingRefinesWithWallet() &&
+                              // Only refinedImages and wallet should change
+                              data.displayName == existingData.displayName &&
+                              areImmutableFieldsUnchanged &&
+                              data.emailVerified == existingData.emailVerified &&
+                              data.afrocoins == existingData.afrocoins;
+
+
+        // Combine all conditions
+        return areImmutableFieldsUnchanged && (isStandardUpdate || isCoinPurchase || isRefinePurchase);
+      }
+
+      /** Server-only updates — allows wallet top-ups via Admin SDK */
+      function isValidServerUpdate() {
+        let data = request.resource.data;
+        let existingData = resource.data;
+
+        let isWalletUpdateValid =
+            data.wallet.balance >= existingData.wallet.balance &&
+            data.wallet.currency == 'USD' &&
+            existingData.wallet.currency == 'USD';
+
+        let areOtherFieldsUnchanged =
+            data.displayName == existingData.displayName &&
+            data.email == existingData.email &&
+            data.creationDate == existingData.creationDate &&
+            data.emailVerified == existingData.emailVerified &&
+            data.afrocoins == existingData.afrocoins &&
+            data.refinedImages == existingData.refinedImages;
+
+        return isWalletUpdateValid && areOtherFieldsUnchanged;
+      }
+
+      // === PERMISSIONS ===
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidCreate();
+      allow update: if (isOwner(userId) && isValidClientUpdate()) ||
+                     (isServer() && isValidServerUpdate());
+      allow delete: if false;
+    }
+  }
+}

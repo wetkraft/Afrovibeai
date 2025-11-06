@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /profile
+Disallow: /payment-success
+
+Sitemap: https://artcover.afrovibe.com/sitemap.xml

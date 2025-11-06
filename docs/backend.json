@@ -1,0 +1,95 @@
+
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the ArtCover AI application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name or username."
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "Date and time the user account was created.",
+          "format": "date-time"
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Flag indicating if the user has verified their email address."
+        },
+        "afrocoins": {
+          "type": "number",
+          "description": "The number of Afrocoins the user has."
+        },
+        "refinedImages": {
+            "type": "number",
+            "description": "The number of refined images the user can generate."
+        },
+        "wallet": {
+          "type": "object",
+          "description": "User's cash wallet. Balance is always in USD.",
+          "properties": {
+            "balance": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string",
+              "enum": ["USD"]
+            }
+          },
+          "required": ["balance", "currency"]
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "creationDate",
+        "emailVerified",
+        "afrocoins",
+        "refinedImages",
+        "wallet"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous",
+      "google.com"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information. Path-based ownership ensures only the authenticated user can access their profile. The 'userId' parameter corresponds to the Firebase Auth UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, matching the Firebase Auth UID."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure Authorization Independence, DBAC, and QAPs. Users are stored under `/users/{userId}`. The structure focuses on path-based ownership for private user data, ensuring only the authenticated user can access their information. Since ArtCover AI does not have collaborative features that would necessitate membership maps, denormalization is unnecessary at this time."
+  }
+}
