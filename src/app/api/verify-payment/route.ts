@@ -1,35 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Flutterwave from 'flutterwave-node-v3';
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
+import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-
-// Helper to initialize Firebase Admin SDK
-function initializeFirebaseAdmin(): App {
-  if (getApps().length > 0) {
-    return getApps()[0];
-  }
-
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-
-  if (!privateKey || !clientEmail || !projectId) {
-    throw new Error('Firebase environment variables are not set.');
-  }
-
-  // The private key from environment variables often has escaped newlines.
-  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
-
-  return initializeApp({
-    credential: cert({
-      projectId,
-      clientEmail,
-      privateKey: formattedPrivateKey,
-    }),
-  });
-}
+import type { App } from 'firebase-admin/app';
 
 // Function to get the NGN to USD conversion rate.
 // This now uses a fixed rate of 1 USD = 1600 NGN.
@@ -39,7 +14,7 @@ function getUsdConversionRate(): number {
 
 
 export async function POST(request: NextRequest) {
-  let adminApp;
+  let adminApp: App;
   try {
     adminApp = initializeFirebaseAdmin();
   } catch (error: any) {
@@ -70,7 +45,7 @@ export async function POST(request: NextRequest) {
 
 
   // 2. Verify payment with Flutterwave
-  const flw = new Flutterwave(process.env.FLUTTERWAVE_PUBLIC_KEY!, process.env.FLUTTERWAVE_SECRET_KEY!);
+  const flw = new Flutterwave(process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY!, process.env.FLUTTERWAVE_SECRET_KEY!);
   
   try {
     const response = await flw.Transaction.verify({ id: String(transaction_id) });
