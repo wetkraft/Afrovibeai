@@ -54,9 +54,6 @@ CRITICAL INSTRUCTIONS:
         {media: {url: baseImageUrl}},
         {text: finalPrompt},
       ],
-      config: {
-        responseModalities: ['IMAGE', 'TEXT'],
-      },
     });
 
     if (!media.url) {
